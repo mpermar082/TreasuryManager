@@ -6,6 +6,7 @@
 use clap::Parser;
 use treasurymanager::{Result, run};
 
+/// Command-line arguments parser
 #[derive(Parser)]
 #[command(version, about = "TreasuryManager - A Rust implementation")]
 struct Cli {
@@ -13,16 +14,19 @@ struct Cli {
     #[arg(short, long)]
     verbose: bool,
     
-    /// Input file path
-    #[arg(short, long)]
+    /// Path to input file
+    #[arg(short = 'i', long = "input")]
     input: Option<String>,
     
-    /// Output file path
-    #[arg(short, long)]
+    /// Path to output file
+    #[arg(short = 'o', long = "output")]
     output: Option<String>,
 }
 
 fn main() -> Result<()> {
+    // Parse command-line arguments
     let args = Cli::parse();
+    
+    // Run the application with parsed arguments
     run(args.verbose, args.input, args.output)
 }
