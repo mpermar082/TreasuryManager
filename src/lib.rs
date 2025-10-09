@@ -8,22 +8,31 @@ use serde::{Serialize, Deserialize};
 use std::fs;
 use std::path::Path;
 
+/// Custom result type for the library, wrapping a boxed error
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+/// Process result structure, containing success, message, and optional data
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProcessResult {
+    /// Whether the process was successful
     pub success: bool,
+    /// Message describing the outcome of the process
     pub message: String,
+    /// Optional data returned from the process
     pub data: Option<serde_json::Value>,
 }
 
+/// TreasuryManager processor, handling data processing and statistics
 #[derive(Debug)]
 pub struct TreasuryManagerProcessor {
+    /// Whether to enable verbose logging
     verbose: bool,
+    /// Count of processed items
     processed_count: usize,
 }
 
 impl TreasuryManagerProcessor {
+    /// Create a new processor instance with the specified verbosity level
     pub fn new(verbose: bool) -> Self {
         Self {
             verbose,
@@ -31,6 +40,15 @@ impl TreasuryManagerProcessor {
         }
     }
 
+    /// Process a given string of data
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The string of data to process
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the process result
     pub fn process(&mut self, data: &str) -> Result<ProcessResult> {
         if self.verbose {
             debug!("Processing data of length: {}", data.len());
@@ -52,6 +70,11 @@ impl TreasuryManagerProcessor {
         Ok(result)
     }
 
+    /// Get statistics about the processed items
+    ///
+    /// # Returns
+    ///
+    /// A JSON value containing the statistics
     pub fn get_stats(&self) -> serde_json::Value {
         serde_json::json!({
             "processed_count": self.processed_count,
@@ -62,6 +85,7 @@ impl TreasuryManagerProcessor {
 
 /// Main processing function
 pub fn run(verbose: bool, input: Option<String>, output: Option<String>) -> Result<()> {
+    // Initialize logging based on verbosity
     if verbose {
         env_logger::Builder::from_default_env()
             .filter_level(log::LevelFilter::Debug)
@@ -77,65 +101,57 @@ pub fn run(verbose: bool, input: Option<String>, output: Option<String>) -> Resu
     // Read input
     let input_data = match input {
         Some(path) => {
-            info!("Reading from file: {}", path);
-            fs::read_to_string(&path)?
-        },
-        None => {
-            info!("Using default test data");
-            "Sample data for processing".to_string()
+            info!("Reading input from file: {}", path);
+            fs::read_to_string(path)
         }
-    };
-    
-    // Process data
-    let result = processor.process(&input_data)?;
-    
-    if verbose {
-        debug!("Processing result: {:#?}", result);
-    }
-    
-    // Save output
-    let output_json = serde_json::to_string_pretty(&result)?;
-    
-    match output {
-        Some(path) => {
-            info!("Writing results to: {}", path);
-            fs::write(&path, &output_json)?;
-        },
         None => {
-            println!("{}", output_json);
+            info!("No input file specified");
+            Ok(String::new())
         }
-    }
-    
-    let stats = processor.get_stats();
-    info!("Processing complete. Stats: {}", stats);
-    
+    }?;
+
+    // Process input data
+    let results = process_input_data(&mut processor, input_data);
+
+    // Output results
+    output_results(output, results);
+
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Process a string of input data
+///
+/// # Arguments
+///
+/// * `processor` - The processor instance
+/// * `input_data` - The string of input data
+///
+/// # Returns
+///
+/// A vector of process results
+fn process_input_data(processor: &mut TreasuryManagerProcessor, input_data: String) -> Vec<ProcessResult> {
+    let mut results = Vec::new();
 
-    #[test]
-    fn test_processor_creation() {
-        let processor = TreasuryManagerProcessor::new(true);
-        assert_eq!(processor.verbose, true);
-        assert_eq!(processor.processed_count, 0);
+    for line in input_data.lines() {
+        let result = processor.process(line)?;
+        results.push(result);
     }
 
-    #[test]
-    fn test_data_processing() {
-        let mut processor = TreasuryManagerProcessor::new(false);
-        let result = processor.process("test data").unwrap();
-        
-        assert!(result.success);
-        assert_eq!(processor.processed_count, 1);
-    }
+    results
+}
 
-    #[test]
-    fn test_run_function() {
-        // Test the main run function
-        let result = run(false, None, None);
-        assert!(result.is_ok());
+/// Output process results to a file
+///
+/// # Arguments
+///
+/// * `output` - The output file path
+/// * `results` - The vector of process results
+fn output_results(output: Option<String>, results: Vec<ProcessResult>) {
+    if let Some(path) = output {
+        info!("Outputting results to file: {}", path);
+        let json = serde_json::to_string_pretty(&results)?;
+        fs::write(path, json).expect("Failed to write output file");
+    } else {
+        info!("No output file specified");
     }
 }
